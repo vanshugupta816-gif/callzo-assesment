@@ -1,0 +1,72 @@
+
+services:
+
+  # PostgreSQL database
+  db:
+    image: postgres:16
+    container_name: callzo-postgres
+    restart: always
+
+    environment:
+      POSTGRES_DB: callzo_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d callzo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: callzo-api
+
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      DATABASE_URL: postgresql://neondb_owner:npg_4bnOAYVXJ9pC@ep-ancient-smoke-aollgekt-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      WEBHOOK_SECRET: d6e76ca9c6377855a08a2c02b98235d4bdd3ebfb93475f299155e78c481c39bd
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Company's prebuilt webhook simulator
+  simulator:
+    image: meetrj/callzo-webhook-simulator
+    container_name: callzo-simulator
+
+    platform: linux/arm64
+
+    depends_on:
+      api:
+        condition: service_started
+
+    command:
+      - "--url"
+      - "http://api:8000/webhooks/calls"
+      - "--scenario"
+      - "cap_burst"
+
+volumes:
+  postgres_data:
